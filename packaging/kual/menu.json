@@ -1,0 +1,17 @@
+{
+  "items": [{
+    "name": "Kindle battery monitor",
+    "items": [
+      {"name": "Install/update", "action": "bin/control.sh", "params": "install", "exitmenu": true},
+      {"name": "Enable automatic startup and start", "action": "bin/control.sh", "params": "enable", "exitmenu": true},
+      {"name": "Disable automatic startup and stop", "action": "bin/control.sh", "params": "disable", "exitmenu": true},
+      {"name": "Start this session", "action": "bin/control.sh", "params": "start", "exitmenu": true},
+      {"name": "Stop this session", "action": "bin/control.sh", "params": "stop", "exitmenu": true},
+      {"name": "Status", "action": "bin/control.sh", "params": "status", "exitmenu": true},
+      {"name": "Uninstall entire extension", "items": [
+        {"name": "Confirm uninstall", "action": "bin/control.sh", "params": "uninstall-confirm", "exitmenu": true},
+        {"name": "Cancel", "action": "bin/control.sh", "params": "cancel", "exitmenu": true}
+      ]}
+    ]
+  }]
+}

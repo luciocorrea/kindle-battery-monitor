@@ -1,0 +1,37 @@
+[package]
+name = "kindle-lipc-dbus"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+authors = ["Kindle battery monitor contributors"]
+license = "MIT"
+publish = false
+keywords = ["kindle", "dbus", "lipc"]
+description = "Kindle LIPC protocol over DBus"
+
+[dependencies]
+async-io = "2.6"
+futures-lite = "2.6"
+thiserror = "2.0"
+zbus = { version = "5.15.0", default-features = false, features = [
+    "async-io",
+    "blocking-api",
+] }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+needless_borrow = "deny"
+redundant_clone = "deny"
+await_holding_lock = "deny"
+bool_to_int_with_if = "warn"

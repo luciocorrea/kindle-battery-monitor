@@ -1,0 +1,49 @@
+[package]
+name = "kindle-battery-monitor"
+version = "0.1.1"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT"
+description = "Awake-only Kindle battery broadcasts over BTHome Bluetooth LE"
+authors = ["Kindle battery monitor contributors"]
+keywords = ["kindle", "bluetooth", "bthome", "battery"]
+publish = false
+
+[workspace]
+members = ["crates/lipc-dbus"]
+default-members = ["."]
+resolver = "2"
+
+[dependencies]
+thiserror = "2.0"
+socket2 = { version = "0.6", features = ["all"] }
+async-io = "2.6"
+futures-lite = "2.6"
+zbus = { version = "=5.15.0", default-features = false, features = ["async-io"] }
+tracing = "0.1"
+kindle-lipc-dbus = { path = "crates/lipc-dbus" }
+crossbeam-channel = "0.5"
+async-channel = "2.5"
+ctrlc = { version = "3.4", features = ["termination"] }
+tracing-subscriber = { version = "0.3", features = ["json"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.27"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
