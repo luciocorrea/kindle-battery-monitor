@@ -32,37 +32,49 @@ Home Assistant retains the last percentage while the Kindle sleeps. A competing 
 
 ## Build and package
 
-Requirements: Rustup with Rust 1.95.0, Clippy and rustfmt; `cross` on PATH; Docker; Python 3.11 or newer. Qualification used cross 0.2.5, commit `65fe72b`. Set `PYTHON` if the default `python3` is older.
+Host verification requires Rustup with Rust 1.95.0, Clippy and rustfmt, a host `dbus-daemon` for isolated test buses, and `timeout` and `sha256sum` on PATH for the unchanged KUAL controller tests. On macOS, GNU coreutils provides the latter commands. ARM verification and builds also require `cross` on PATH and accessible Docker. Qualification used cross 0.2.5, commit `65fe72b`. Host automation and its fixtures use the repository's Rust `xtask` package; Python is not required.
 
 ```sh
-./scripts/test.sh
-./scripts/build.sh
-./scripts/package.sh
+cargo xtask verify --arm
+cargo xtask build
+cargo xtask package
 ```
 
-The packaging command builds by default and writes a versioned ZIP plus `.zip.sha256` sidecar under `dist/`. To choose a Python executable, existing binary, or output directory:
+The packaging command builds by default and writes a versioned ZIP plus `.zip.sha256` sidecar under `dist/`. To package an existing binary or choose an output directory:
 
 ```sh
-PYTHON=python3.14 ./scripts/test.sh
-PYTHON=python3.14 ./scripts/package.sh
-./scripts/package.sh --binary /path/to/kindle-battery-monitor --output /path/to/releases
+cargo xtask package --binary /path/to/kindle-battery-monitor --output /path/to/releases
 ```
 
 `rust-toolchain.toml` pins Rust. `Cross.toml` pins the qualified ARM musl image by digest. Cargo downloads registry dependencies on first use; LIPC is bundled under `crates/lipc-dbus`. The project builds without the original SDK checkout, parent workspace, firmware artifacts, or Amazon libraries to link.
+
+`xtask` runs on the host and stays outside the Kindle dependency graph. ARM builds select `kindle-battery-monitor` explicitly. Keep the repository-owned `.cargo/config.toml` in source copies so the Cargo alias remains available. To create an unpacked KUAL extension instead of a ZIP, use `cargo xtask stage --binary /path/to/kindle-battery-monitor --output /path/to/new-extension`; the output directory must not exist.
 
 The packager rejects non-ARM binaries, dynamic segments, and interpreter requirements. Payload hashes are recorded in the manifest and older-version archives are retained. SHA-256 detects damaged files; it does not authenticate a publisher.
 
 ## Development
 
 ```sh
-rustup run 1.95.0 cargo test --workspace --locked
-rustup run 1.95.0 cargo fmt --all --check
-compiler=$(rustup which --toolchain 1.95.0 rustc)
-PATH="$(dirname "$compiler"):$PATH" rustup run 1.95.0 cross clippy --workspace --target arm-unknown-linux-musleabihf --locked -- -D warnings
+cargo xtask verify
+cargo xtask verify --arm
 ```
 
-Use `cross` for target compilation. Host tests use isolated fakes, sockets, and test buses. One radio test is opt-in because it requires a host `dbus-daemon`. Tests do not access a physical Kindle. Preserve zero polling, bounded shutdown, owned radio cleanup, and normal suspend.
+`verify` checks formatting, local Markdown links, strict rustdoc, host Clippy for the workspace and all targets, and workspace tests including doctests and the native controller, packaging, command, and source-isolation fixtures. It reports the selected tool versions and explicitly reports ARM as skipped. `verify --arm` runs the same host checks followed by all-targets ARM Clippy through the digest-pinned cross image, excluding the host-only `xtask` package. ARM prerequisites are checked before host checks; an unavailable Docker daemon or failing stage returns a nonzero status. `cargo xtask --help` lists the commands.
 
-See the [glossary](CONTEXT.md), [protocol notes](docs/protocol.md), [startup decision](docs/adr/0001-battery-monitor-startup-controls.md), and [verification](docs/verification.md). Runtime Rust sources and KUAL controller/job assets were extracted unchanged from qualified version 0.1.1. Source/build verification and physical device qualification are recorded separately.
+Run `cargo xtask check-links` for documentation links alone. It checks maintained `.md` files at the repository root and under `docs/`, excluding scratch, caches, Git metadata, and build artifacts. Local inline/reference links and images resolve from the referring document; encoded paths and directory targets are supported. Markdown heading fragments use GitHub-style slugs and duplicate suffixes. Fragments on non-Markdown targets are outside this check. Fenced code and inline code examples are ignored, and external URL schemes are skipped without network access. This is a repository link checker, not a complete CommonMark validator.
+
+`xtask` selects the pinned toolchain's executable directory before running Cargo subcommands and clears `RUSTC_WRAPPER` for child commands. This prevents a Homebrew Clippy or rustfmt earlier on PATH from overriding the pin. Cargo must first compile `xtask`, so an inherited broken compiler wrapper can fail before those guards run. For an explicit pin and wrapper-free bootstrap, use:
+
+```sh
+env -u RUSTC_WRAPPER rustup run 1.95.0 cargo xtask verify --arm
+```
+
+Test-only lint expectations cover five intentional LIPC assertions; production lint policy remains enforced.
+
+Use `cross` for target compilation. Host tests use isolated fakes, sockets, and test buses. One additional radio test remains opt-in and is reported as ignored by the normal Rust test run. ARM Clippy checks target code without running it on hardware. Tests do not access a physical Kindle. Host and ARM checks do not establish radio reception, suspend behavior, or physical qualification. Preserve zero polling, bounded shutdown, owned radio cleanup, and normal suspend.
+
+The Rust library exposes `session`, `bthome`, and `logging`. Construct `Session::new(RunMode::Once)` or `Session::new(RunMode::Continuous)` without device IO, obtain its cancellation handle, then await the consuming `run` operation. The caller owns signal handling and tracing setup. After requesting cancellation, keep polling the run future through owned cleanup; dropping it is not a cleanup mechanism. Typed causes and ordered cleanup failures remain available under `session::errors`. Lower-level operational modules are private; their behavioral tests live inside the crate. Compiler tests enforce that separation. The bundled LIPC crate retains its separate interface.
+
+See the [glossary](CONTEXT.md), [protocol notes](docs/protocol.md), [startup decision](docs/adr/0001-battery-monitor-startup-controls.md), and [verification commands](#development). This project originated from qualified version 0.1.1. Source/build verification and physical device qualification are recorded separately.
 
 MIT license. See [LICENSE](LICENSE). Dependencies retain their own licenses.

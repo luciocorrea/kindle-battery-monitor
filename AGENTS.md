@@ -40,8 +40,25 @@
 ## Build and release verification
 
 - Keep this workspace independent: local source dependencies must resolve inside the project. Preserve the source-only-copy architecture invariant and bundled LIPC boundary.
-- Use the pinned Rustup compiler and cross image through `scripts/build.sh` for Kindle target builds. Keep the executable statically linked for ARM musl; review native dependencies against the container/sysroot before adding them.
-- For Rust changes, run targeted tests, the workspace test script, formatting, and ARM Clippy with warnings denied using the commands in [Development](README.md#development). For power/radio changes, also complete the agreed physical acceptance.
+- Use the pinned Rustup compiler and cross image through `cargo xtask build` for Kindle target builds. Keep host-only tooling outside the Kindle dependency graph and the executable statically linked for ARM musl; review native dependencies against the container/sysroot before adding them.
+- For Rust changes, run targeted tests, then `env -u RUSTC_WRAPPER rustup run 1.95.0 cargo xtask verify --arm` for formatting, strict rustdoc, workspace tests, and host/ARM Clippy with warnings denied. See [Development](README.md#development) for prerequisites and host-only mode. For power/radio changes, also complete the agreed physical acceptance.
 - For packaging changes, run the relevant command-contract tests, existing KUAL controller/archive tests, and a real package build. Verify ELF type, manifest/version agreement, payload hashes, executable permissions, and checksum sidecars.
 - Preserve safe upgrades: package extraction must not overwrite the live executable or saved state; retain ownership checks, rollback, original mount mode, and independent boot/session choices. Release naming must preserve older versions.
 - Source distributions contain project source, tests, configuration, and curated docs. Exclude `.scratch`, build caches, device backups/logs, credentials, and workstation-specific configuration. Use synthetic identifiers in distributable examples.
+
+## Agent skills
+
+### Issue tracker
+
+Before creating, fetching, or updating tickets, read
+[the local Markdown tracker conventions](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Before assigning ticket status, read
+[the triage label mapping](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Before domain exploration or design work, read
+[the single-context domain rules](docs/agents/domain.md).

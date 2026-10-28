@@ -175,6 +175,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::expect_used,
+        reason = "a fake successful reply must decode in this test"
+    )]
     fn get_int_property_calls_default_lipc_endpoint_and_decodes_value() {
         let transport = FakeTransport::new(vec![FakeReply::Int(0, 87)]);
         let client = LipcDbusClient::from_transport(transport);
@@ -196,6 +200,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::expect_used,
+        reason = "a fake successful reply must decode in this test"
+    )]
     fn get_string_property_calls_default_lipc_endpoint_and_decodes_value() {
         let transport = FakeTransport::new(vec![FakeReply::String(0, "ready".to_owned())]);
         let client = LipcDbusClient::from_transport(transport);
@@ -217,6 +225,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::expect_used,
+        reason = "a fake successful reply must decode in this test"
+    )]
     fn set_int_property_calls_lipc_method_with_value() {
         let transport = FakeTransport::new(vec![FakeReply::Status(0)]);
         let client = LipcDbusClient::from_transport(transport);
@@ -238,6 +250,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::expect_used,
+        reason = "a fake successful reply must decode in this test"
+    )]
     fn set_string_property_calls_lipc_method_with_value() {
         let transport = FakeTransport::new(vec![FakeReply::Status(0)]);
         let client = LipcDbusClient::from_transport(transport);
@@ -259,6 +275,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::expect_used,
+        reason = "a fake error reply must fail in this test"
+    )]
     fn nonzero_lipc_status_is_returned_as_typed_error() {
         let transport = FakeTransport::new(vec![FakeReply::Int(8, 0)]);
         let client = LipcDbusClient::from_transport(transport);

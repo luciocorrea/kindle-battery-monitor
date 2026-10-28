@@ -10,7 +10,7 @@ keywords = ["kindle", "bluetooth", "bthome", "battery"]
 publish = false
 
 [workspace]
-members = ["crates/lipc-dbus"]
+members = ["crates/lipc-dbus", "xtask"]
 default-members = ["."]
 resolver = "2"
 

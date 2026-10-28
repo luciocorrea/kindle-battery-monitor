@@ -1,27 +1,41 @@
-//! Awake-only battery sampling and bounded BTHome radio transactions.
+//! Awake-only monitor sessions and pure BTHome battery encoding.
 //!
-//! [`monitor`] coordinates injected battery, event, and publication boundaries;
-//! [`runtime`] supplies the blocking device adapters. [`ownership`] acquires and
-//! releases stock BLE source 4, while [`broadcast`] handles advertisement cleanup.
-//! Waiting uses events or ordinary timers, without suspend inhibitors or wake alarms.
+//! [`session::Session`] owns startup, event-driven sampling, publication and
+//! explicit cleanup. Callers own process signal handling, tracing setup and exit
+//! status. Request cancellation through [`session::Cancellation`] and keep polling
+//! the session until cleanup completes; dropping a run future is not cleanup.
 //!
-//! BSA layouts and stock service behavior are qualified only for the Paperwhite 4
-//! firmware 5.16.5 described in the repository's `docs/compatibility.md`.
-//! `docs/protocol.md` records the wire format and radio transaction sequence.
-//! Host tests and these API contracts do not extend physical device qualification.
+//! [`bthome`] encodes validated samples without IO; [`logging`] supplies bounded
+//! tracing writers. [`session::errors`] preserves typed causes and cleanup fields
+//! without exposing device-operation interfaces. Waiting adds no suspend inhibitor
+//! or wake alarm. Listener cleanup has a cooperative budget after radio cleanup,
+//! rather than a whole-process shutdown deadline.
+//!
+//! BSA layouts and stock services are qualified only for Paperwhite 4 firmware
+//! 5.16.5 as recorded in `docs/compatibility.md`. `docs/protocol.md` owns the wire
+//! format and radio sequence. Host checks do not extend physical qualification.
 
 #![forbid(unsafe_code)]
 
-pub mod adapter;
-pub mod broadcast;
-pub mod bsa;
+mod adapter;
+mod broadcast;
+mod bsa;
 pub mod bthome;
-pub mod config;
+mod config;
 pub mod logging;
-pub mod monitor;
-pub mod ownership;
-pub mod powerd;
-pub mod powerd_events;
-pub mod radio;
-pub mod readiness;
-pub mod runtime;
+mod monitor;
+mod ownership;
+mod powerd;
+mod powerd_events;
+mod radio;
+mod readiness;
+mod runtime;
+
+/// Monitor session composition and cooperative cancellation.
+pub mod session;
+
+#[cfg(test)]
+mod error_chain_tests;
+
+#[cfg(doctest)]
+mod visibility_contract;

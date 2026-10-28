@@ -8,11 +8,11 @@ use crate::bthome::BthomeSample;
 use thiserror::Error;
 
 /// The qualified firmware's 832-byte set-config payload size, excluding reply status.
-pub const CONFIG_BYTES: usize = 0x340;
+const CONFIG_BYTES: usize = 0x340;
 
 /// The stock local-privacy policy requested for the owned burst or its cleanup.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AddressPolicy {
+pub(crate) enum AddressPolicy {
     /// Request the factory public Bluetooth address for receiver identity stability.
     Public,
     /// Request the stock rotating-address policy after the burst.
@@ -23,7 +23,7 @@ pub enum AddressPolicy {
 ///
 /// Selects only local privacy. Callers must own the burst before requesting
 /// [`AddressPolicy::Public`] and request [`AddressPolicy::Rotating`] during cleanup.
-pub fn privacy(policy: AddressPolicy) -> [u8; CONFIG_BYTES] {
+pub(crate) fn privacy(policy: AddressPolicy) -> [u8; CONFIG_BYTES] {
     let mut request = [0; CONFIG_BYTES];
     request[..4].copy_from_slice(&0x20000_u32.to_le_bytes());
     request[4] = 1;
@@ -39,7 +39,7 @@ pub fn privacy(policy: AddressPolicy) -> [u8; CONFIG_BYTES] {
 /// Selects primary advertisement flags, BTHome service data, and the explicit
 /// Complete Local Name `Kindle`. It leaves the global Bluetooth name untouched
 /// and does not configure a scan response.
-pub fn advertising_data(sample: BthomeSample) -> [u8; CONFIG_BYTES] {
+pub(crate) fn advertising_data(sample: BthomeSample) -> [u8; CONFIG_BYTES] {
     let mut request = [0; CONFIG_BYTES];
     request[..4].copy_from_slice(&0x8000_u32.to_le_bytes());
     request[4] = 1;
@@ -60,7 +60,7 @@ pub fn advertising_data(sample: BthomeSample) -> [u8; CONFIG_BYTES] {
 
 /// Whether legacy BLE advertising is inactive or active.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AdvertisingState {
+pub(crate) enum AdvertisingState {
     /// Neither BLE discoverability nor BLE connectability is enabled.
     Inactive,
     /// At least one advertising-related BLE flag is enabled.
@@ -70,7 +70,7 @@ pub enum AdvertisingState {
 /// Encodes the legacy BLE discoverability request for starting or stopping a burst.
 ///
 /// This request selects the discoverability field; unrelated fields remain unselected.
-pub fn visibility(state: AdvertisingState) -> [u8; CONFIG_BYTES] {
+pub(crate) fn visibility(state: AdvertisingState) -> [u8; CONFIG_BYTES] {
     let mut request = [0; CONFIG_BYTES];
     request[..4].copy_from_slice(&0x2000_u32.to_le_bytes());
     request[4] = 1;
@@ -85,7 +85,7 @@ pub fn visibility(state: AdvertisingState) -> [u8; CONFIG_BYTES] {
 ///
 /// Identity data and uninitialized reply bytes are deliberately excluded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DeviceConfig {
+pub(crate) struct DeviceConfig {
     enabled: bool,
     discoverable: bool,
     connectable: bool,
@@ -125,7 +125,7 @@ impl DeviceConfig {
     ///
     /// Rejects a length other than 836 bytes, nonzero status, or decoded flags
     /// whose values are not zero or one. Performs no IO and logs no reply bytes.
-    pub fn from_reply(reply: &[u8]) -> Result<Self, ConfigError> {
+    pub(crate) fn from_reply(reply: &[u8]) -> Result<Self, ConfigError> {
         if reply.len() != CONFIG_BYTES + 4 {
             return Err(ConfigError::Length {
                 actual: reply.len(),
@@ -146,7 +146,7 @@ impl DeviceConfig {
     }
 
     /// Treats either BLE discoverability or BLE connectability as active advertising.
-    pub const fn advertising_state(self) -> AdvertisingState {
+    pub(crate) const fn advertising_state(self) -> AdvertisingState {
         if self.ble_discoverable || self.ble_connectable {
             AdvertisingState::Active
         } else {
@@ -155,7 +155,7 @@ impl DeviceConfig {
     }
 
     /// Returns the decoded radio-enabled flag without performing IO.
-    pub const fn radio_enabled(self) -> bool {
+    pub(crate) const fn radio_enabled(self) -> bool {
         self.enabled
     }
 }
@@ -167,3 +167,6 @@ fn flag(field: &'static str, value: u8) -> Result<bool, ConfigError> {
         value => Err(ConfigError::Field { field, value }),
     }
 }
+
+#[cfg(test)]
+mod tests;

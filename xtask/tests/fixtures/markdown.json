@@ -1,0 +1,169 @@
+[
+  {
+    "case": "test_angle_destinations_do_not_require_balanced_parentheses",
+    "files": {
+      "README.md": "[read](<missing(.md>)\n[valid](<docs/guide(.md>)\n",
+      "docs/guide(.md": "# Guide\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:1: missing(.md: missing target\n"
+  },
+  {
+    "case": "test_backslash_inside_code_does_not_escape_the_closing_backtick",
+    "files": {
+      "README.md": "`literal\\` [read](missing.md) `next`\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:1: missing.md: missing target\n"
+  },
+  {
+    "case": "test_blockquoted_fences_hide_code_but_not_following_document_links",
+    "files": {
+      "README.md": "> ~~~md\n> [example](missing.md)\n> ~~~\n> > ```md\n> > [example](missing.md)\n> > ```\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (1 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_blockquoted_fences_hide_code_but_not_following_document_links",
+    "files": {
+      "README.md": "> ~~~md\n> [example](missing.md)\n[real](also-missing.md)\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:3: also-missing.md: missing target\n"
+  },
+  {
+    "case": "test_broken_reference_images_and_undefined_references_fail",
+    "files": {
+      "README.md": "# Project\n![logo][image]\n[read][unknown]\n[image]: missing.png\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:2: missing.png: missing target\nREADME.md:3: unknown: undefined reference\n"
+  },
+  {
+    "case": "test_escaped_backticks_do_not_hide_real_links",
+    "files": {
+      "README.md": "\\` [read](missing.md) \\`\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:1: missing.md: missing target\n"
+  },
+  {
+    "case": "test_heading_emphasis_is_removed_but_literal_underscores_are_preserved",
+    "files": {
+      "README.md": "# _Refresh interval_\n[go](#refresh-interval)\n# __Readback deadline__\n[go](#readback-deadline)\n# snake_case\n[go](#snake_case)\n# `_literal_`\n[go](#_literal_)\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (1 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_heading_fragments_include_formatting_unicode_and_duplicate_suffixes",
+    "files": {
+      "README.md": "# Project\n[local](#project)\n[first](docs/guide.md#hello-world)\n[second](docs/guide.md#hello-world-1)\n[collision](docs/guide.md#hello-world-1-1)\n[third](docs/guide.md#hello-world-2)\n[unicode](docs/guide.md#caf%C3%A9)\n[setext](docs/guide.md#other-heading)\n",
+      "docs/guide.md": "# Hello, *world*!\n# Hello, `world`!\n# Hello-world-1\n# Hello, world!\n# Café\nOther heading\n---\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (2 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_literal_code_and_external_schemes_are_not_local_links",
+    "files": {
+      "README.md": "# Project\n`[code](missing.md)`\n``[code](also-missing.md) ` literal``\n```md\n# Not a heading\n[code](missing.md)\n```\n~~~md\n[code](missing.md)\n~~~\n[web](https://example.invalid/no-network)\n[mail](mailto:example@example.invalid)\n[custom](plugin://example/missing)\n[relative-host](//example.invalid/missing)\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (1 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_literal_code_and_external_schemes_are_not_local_links",
+    "files": {
+      "README.md": "# Project\n`[code](missing.md)`\n``[code](also-missing.md) ` literal``\n```md\n# Not a heading\n[code](missing.md)\n```\n~~~md\n[code](missing.md)\n~~~\n[web](https://example.invalid/no-network)\n[mail](mailto:example@example.invalid)\n[custom](plugin://example/missing)\n[relative-host](//example.invalid/missing)\n",
+      "docs/link.md": "[not real](../README.md#not-a-heading)\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "docs/link.md:1: ../README.md#not-a-heading: missing heading fragment\n"
+  },
+  {
+    "case": "test_missing_targets_and_fragments_report_source_line_and_target",
+    "files": {
+      "README.md": "# Project\n[missing](absent.md)\n[bad](docs/guide.md#absent)\n",
+      "docs/guide.md": "# Guide\n"
+    },
+    "status": 1,
+    "stdout": "",
+    "stderr": "README.md:2: absent.md: missing target\nREADME.md:3: docs/guide.md#absent: missing heading fragment\n"
+  },
+  {
+    "case": "test_only_root_and_maintained_docs_are_checked",
+    "files": {
+      ".cache/ignored.md": "[bad](missing.md)\n",
+      ".git/ignored.md": "[bad](missing.md)\n",
+      ".scratch/ignored.md": "[bad](missing.md)\n",
+      "README.md": "# Project\n[guide](docs/guide.md)\n",
+      "__pycache__/ignored.md": "[bad](missing.md)\n",
+      "dist/ignored.md": "[bad](missing.md)\n",
+      "docs/.scratch/ignored.md": "[bad](missing.md)\n",
+      "docs/__pycache__/ignored.md": "[bad](missing.md)\n",
+      "docs/dist/ignored.md": "[bad](missing.md)\n",
+      "docs/guide.md": "# Guide\n",
+      "docs/target/ignored.md": "[bad](missing.md)\n",
+      "src/ignored.md": "[bad](missing.md)\n",
+      "target/ignored.md": "[bad](missing.md)\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (2 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_reference_labels_accept_escaped_closing_brackets",
+    "files": {
+      "README.md": "[read][a\\]]\n\n[a\\]]: guide.md\n",
+      "guide.md": "# Guide\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (2 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_reference_links_images_and_encoded_paths",
+    "files": {
+      "README.md": "# Project\n[read][guide]\n[guide][]\n[guide]\n![logo][image]\n[dir](docs/)\n[space](<docs/a guide.md> \"title\")\n[encoded](docs/a%20guide.md#some-heading)\n[paren](docs/guide(v2).md)\n[guide]: docs/a%20guide.md#some-heading \"Guide\"\n[image]: docs/logo.png\n",
+      "docs/a guide.md": "# Some heading\n",
+      "docs/guide(v2).md": "# Other\n",
+      "docs/logo.png": "synthetic image placeholder"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (3 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_relative_targets_resolve_from_the_referring_document",
+    "files": {
+      "LICENSE": "license text",
+      "README.md": "# Project\n[guide](docs/guide.md)\n",
+      "docs/guide.md": "# Guide\n[license](../LICENSE)\n[root](/README.md)\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (2 maintained documents).\n",
+    "stderr": ""
+  },
+  {
+    "case": "test_unicode_reference_labels_use_full_casefold",
+    "files": {
+      "README.md": "[read][STRASSE]\n\n[Straße]: guide.md\n",
+      "guide.md": "# Guide\n"
+    },
+    "status": 0,
+    "stdout": "Markdown links passed (2 maintained documents).\n",
+    "stderr": ""
+  }
+]

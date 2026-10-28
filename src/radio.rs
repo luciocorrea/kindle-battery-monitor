@@ -38,7 +38,7 @@ impl RadioCommand {
 
 /// The stock frontend completion signal expected after a source command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadioEvent {
+pub(crate) enum RadioEvent {
     /// Completion of a BLE enable request.
     BleEnabled,
     /// Completion of a BLE disable request.
@@ -66,6 +66,9 @@ pub enum RadioState {
 /// A stock radio connection, command, completion, or readback failure.
 #[derive(Debug, thiserror::Error)]
 pub enum RadioError {
+    /// The complete stock ownership inspection exceeded its five-second budget.
+    #[error("stock Bluetooth ownership inspection exceeded its overall deadline")]
+    OwnershipTimeout,
     /// The five-second system-bus connection deadline expired.
     #[error("system DBus connection exceeded its deadline")]
     ConnectionTimeout,
@@ -112,7 +115,7 @@ pub enum RadioError {
 }
 
 /// A connection to the system bus. Construction does not activate Bluetooth.
-pub struct DbusRadio {
+pub(crate) struct DbusRadio {
     connection: zbus::Connection,
     subscription: Option<CompletionSubscription>,
 }
@@ -128,7 +131,7 @@ impl DbusRadio {
     /// # Errors
     ///
     /// Returns a connection timeout or DBus connection error.
-    pub async fn system() -> Result<Self, RadioError> {
+    pub(crate) async fn system() -> Result<Self, RadioError> {
         futures_lite::future::or(
             async {
                 async_io::Timer::after(Duration::from_secs(5)).await;
@@ -149,7 +152,7 @@ impl DbusRadio {
     }
 
     /// Wraps an existing bus connection without subscribing or changing radio state.
-    pub fn from_connection(connection: zbus::Connection) -> Self {
+    fn from_connection(connection: zbus::Connection) -> Self {
         Self {
             connection,
             subscription: None,
@@ -320,7 +323,7 @@ impl RadioProtocol for DbusRadio {
 }
 
 /// The acknowledged subscription, stock LIPC command, event, and readback boundary.
-pub trait RadioProtocol {
+pub(crate) trait RadioProtocol {
     /// Acknowledges a completion subscription bound to the existing frontend owner
     /// before any command is sent. Replaces any previous subscription.
     fn subscribe(&mut self, event: RadioEvent) -> impl Future<Output = Result<(), RadioError>>;
@@ -342,18 +345,19 @@ pub trait RadioProtocol {
 ///
 /// It verifies source 4, not exclusive ownership, and performs no compensating
 /// release on timeout, error, or future cancellation. The caller owns cleanup.
-pub struct RadioController<P> {
+pub(crate) struct RadioController<P> {
     protocol: P,
 }
 
 impl<P> RadioController<P> {
     /// Takes ownership of the protocol adapter without performing a transaction.
-    pub fn new(protocol: P) -> Self {
+    pub(crate) fn new(protocol: P) -> Self {
         Self { protocol }
     }
 
     /// Returns the protocol adapter without performing radio cleanup.
-    pub fn into_protocol(self) -> P {
+    #[cfg(test)]
+    fn into_protocol(self) -> P {
         self.protocol
     }
 }
@@ -364,7 +368,10 @@ impl<P: RadioProtocol> RadioController<P> {
     /// The caller must own the temporary BLE lease before requesting disable.
     /// See [`Self::execute_with_timeout`] for sequencing, cleanup obligations,
     /// and errors. This method does not provide automatic rollback.
-    pub async fn execute(&mut self, command: RadioCommand) -> Result<RadioState, RadioError> {
+    pub(crate) async fn execute(
+        &mut self,
+        command: RadioCommand,
+    ) -> Result<RadioState, RadioError> {
         let timeout = match command {
             RadioCommand::EnableBle => Duration::from_secs(30),
             RadioCommand::DisableBle => Duration::from_secs(10),
@@ -384,7 +391,7 @@ impl<P: RadioProtocol> RadioController<P> {
     ///
     /// Returns deadline, DBus, command-status, completion, or readback failures.
     /// An unrepresentable deadline is a protocol error.
-    pub async fn execute_with_timeout(
+    async fn execute_with_timeout(
         &mut self,
         command: RadioCommand,
         timeout: Duration,
@@ -431,3 +438,6 @@ impl<P: RadioProtocol> RadioController<P> {
         Ok(state)
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -15,7 +15,7 @@ const SERVICES: [&str; 2] = ["com.lab126.powerd", "com.lab126.btfd"];
 ///
 /// Owner snapshots are ordered as powerd, then `com.lab126.btfd`. Implementations
 /// must allow in-flight futures to be dropped for timeout or cancellation.
-pub trait ReadinessProtocol {
+pub(crate) trait ReadinessProtocol {
     /// A subscription, owner lookup, or owner-change stream failure.
     type Error: Error;
     /// Acknowledges owner-change monitoring before the initial owner snapshot.
@@ -91,7 +91,8 @@ async fn bounded<E: Error>(
 /// # Errors
 ///
 /// Returns timeout, cancellation, or protocol errors.
-pub async fn wait_for_services<P: ReadinessProtocol>(
+#[cfg(test)]
+pub(crate) async fn wait_for_services<P: ReadinessProtocol>(
     protocol: &mut P,
     cancelled: impl Future<Output = ()>,
     timeout: Duration,
@@ -107,7 +108,7 @@ pub async fn wait_for_services<P: ReadinessProtocol>(
 /// # Errors
 ///
 /// Returns timeout, cancellation, or underlying DBus errors.
-pub async fn system_readiness(
+pub(crate) async fn system_readiness(
     cancelled: impl Future<Output = ()>,
     timeout: Duration,
 ) -> Result<(), ReadinessError<zbus::Error>> {
@@ -125,14 +126,14 @@ pub async fn system_readiness(
 }
 
 /// A DBus implementation of owner-change readiness, retaining its subscription.
-pub struct DbusReadiness {
+struct DbusReadiness {
     connection: Connection,
     stream: Option<MessageStream>,
 }
 
 impl DbusReadiness {
     /// Stores an existing connection without subscribing or activating services.
-    pub fn new(connection: Connection) -> Self {
+    fn new(connection: Connection) -> Self {
         Self {
             connection,
             stream: None,
@@ -190,3 +191,6 @@ impl ReadinessProtocol for DbusReadiness {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

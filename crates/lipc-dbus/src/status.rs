@@ -1,4 +1,6 @@
 //! Lossless mapping between LIPC wire status codes and named outcomes.
+//!
+//! Conversion is pure and does not contact DBus or a Kindle.
 
 /// A known LIPC status or the original unrecognized unsigned wire code.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +55,24 @@ pub enum LipcStatus {
 
 impl LipcStatus {
     /// Maps known unsigned codes and preserves all other values in [`Self::UnknownCode`].
+    ///
+    /// # Examples
+    ///
+    /// Known statuses have named variants. Unrecognized values round-trip through
+    /// [`Self::code`] without truncation, including values beyond signed `i32`.
+    ///
+    /// ```
+    /// use kindle_lipc_dbus::LipcStatus;
+    ///
+    /// let known = LipcStatus::from_wire_code(8);
+    /// assert_eq!(known, LipcStatus::NoSuchProperty);
+    /// assert_eq!(known.code(), 8);
+    ///
+    /// let raw = 0x8000_0042;
+    /// let unrecognized = LipcStatus::from_wire_code(raw);
+    /// assert_eq!(unrecognized, LipcStatus::UnknownCode(raw));
+    /// assert_eq!(unrecognized.code(), raw);
+    /// ```
     pub const fn from_wire_code(code: u32) -> Self {
         match code {
             0 => Self::Ok,
@@ -82,6 +102,20 @@ impl LipcStatus {
     }
 
     /// Maps nonnegative signed codes; negative values retain their bits as unknown `u32` codes.
+    ///
+    /// # Examples
+    ///
+    /// Signed input preserves the original bit pattern instead of mapping negative
+    /// values to a generic failure.
+    ///
+    /// ```
+    /// use kindle_lipc_dbus::LipcStatus;
+    ///
+    /// assert_eq!(LipcStatus::from_code(0), LipcStatus::Ok);
+    /// let negative = LipcStatus::from_code(-1);
+    /// assert_eq!(negative, LipcStatus::UnknownCode(u32::MAX));
+    /// assert_eq!(negative.code(), u32::MAX);
+    /// ```
     pub const fn from_code(code: i32) -> Self {
         if code < 0 {
             Self::UnknownCode(code as u32)
@@ -91,6 +125,8 @@ impl LipcStatus {
     }
 
     /// Returns the unsigned wire code, preserving the value of [`Self::UnknownCode`].
+    ///
+    /// See [`Self::from_wire_code`] for a round-trip example.
     pub const fn code(self) -> u32 {
         match self {
             Self::Ok => 0,

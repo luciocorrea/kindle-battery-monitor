@@ -1,0 +1,31 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+publish = false
+default-run = "xtask"
+
+[dependencies]
+thiserror = "2.0"
+regex = "1.13"
+percent-encoding = "2.3"
+html-escape = "0.2"
+unicode-casefold = "0.2"
+sha2 = "0.10"
+toml = "0.8"
+zip = { version = "=2.4.2", default-features = false, features = ["deflate-flate2", "flate2"] }
+# The ZIP crate enables its optional flate2 dependency; this selects its Rust backend.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+tempfile = "3.27"
+serde_json = "1.0"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
