@@ -78,3 +78,5 @@ The Rust library exposes `session`, `bthome`, and `logging`. Construct `Session:
 See the [glossary](CONTEXT.md), [protocol notes](docs/protocol.md), [startup decision](docs/adr/0001-battery-monitor-startup-controls.md), and [verification commands](#development). This project originated from qualified version 0.1.1. Source/build verification and physical device qualification are recorded separately.
 
 MIT license. See [LICENSE](LICENSE). Dependencies retain their own licenses.
+
+See [Contributing](CONTRIBUTING.md) for pull requests and [GitHub and releases](docs/github.md) for CI artifacts, public repository setup, and version-tag draft releases.

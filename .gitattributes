@@ -1,0 +1,13 @@
+# Keep local evidence and workstation/build state out of Git source archives.
+/.scratch export-ignore
+/.scratch/** export-ignore
+/target export-ignore
+/target/** export-ignore
+/dist export-ignore
+/dist/** export-ignore
+/.agents export-ignore
+/.agents/** export-ignore
+/.codex export-ignore
+/.codex/** export-ignore
+/.aws export-ignore
+/.aws/** export-ignore
