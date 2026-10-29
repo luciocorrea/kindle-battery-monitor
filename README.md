@@ -44,6 +44,16 @@ Wait for each action to finish. Keep the ZIP outside the Kindle for reinstallati
 
 Home Assistant retains the last percentage while the Kindle sleeps. A competing Bluetooth owner can defer a burst until a later sample trigger. Existing BTHome devices may need their integration reloaded after receiving a named packet to refresh the default device name. The integration entry title and explicit entity-name overrides are separate labels; preserve existing entity IDs and dashboard references when renaming.
 
+## Home Assistant dashboard
+
+![Kindle battery gauge and 24-hour history in Home Assistant](docs/images/home-assistant-dashboard.jpg)
+
+The [dashboard YAML example](docs/examples/home-assistant-dashboard.yaml) uses built-in cards for the battery gauge, update note, and 24-hour history. No custom cards are required.
+
+Create an empty, manually managed dashboard, open its raw configuration editor, and paste the example. Replace `sensor.kindle_battery` with your BTHome battery entity ID. To add the view to an existing dashboard, append the example's `views` entry to your existing list instead of replacing the full configuration. The history graph needs recorded sensor data to display past readings.
+
+Use the battery sensor in a Home Assistant automation to send a charging reminder when the percentage falls below a threshold you choose. The reminder depends on a new report reaching Home Assistant; the displayed value remains unchanged while the Kindle sleeps.
+
 ## Build and package
 
 Host verification requires Rustup with Rust 1.95.0, Clippy and rustfmt, a host `dbus-daemon` for isolated test buses, and `timeout` and `sha256sum` on PATH for the unchanged KUAL controller tests. On macOS, GNU coreutils provides the latter commands. ARM verification and builds also require `cross` on PATH and accessible Docker. Qualification used cross 0.2.5, commit `65fe72b`. Host automation and its fixtures use the repository's Rust `xtask` package; Python is not required.
