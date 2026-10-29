@@ -1,6 +1,10 @@
 # Kindle battery monitor
 
-Report a Kindle's battery percentage to Home Assistant using unencrypted BTHome v2 Bluetooth LE advertisements. Samples are taken at startup, on battery-change events, and every ten minutes while awake. Each broadcast uses a five-second timer followed by bounded radio cleanup. The monitor permits normal suspend.
+Report a Kindle's battery percentage to Home Assistant using unencrypted [BTHome v2](https://bthome.io/) Bluetooth LE advertisements.
+
+**Requires a modded (jailbroken) Kindle with KUAL installed.** This project is a KUAL extension: you use its KUAL menu to install the monitor, manage startup, check status, and uninstall it.
+
+Samples are taken at startup, on battery-change events, and every ten minutes while awake. Each broadcast uses a five-second timer followed by bounded radio cleanup. The monitor permits normal suspend.
 
 The fixed advertised name is `Kindle`. Home Assistant adds an address suffix, for example `Kindle ABCD`. The name is independent of Kindle Settings. Owned bursts use the factory public Bluetooth address so receivers recognize one device across radio restarts. Nearby receivers can read the percentage and address.
 
@@ -8,11 +12,21 @@ The fixed advertised name is `Kindle`. Home Assistant adds an address suffix, fo
 
 The qualified target is a jailbroken Paperwhite 4 on firmware 5.16.5, with KUAL and working stock Bluetooth services. The installer checks the exact model/build and refuses other targets before changing startup files. See [compatibility](docs/compatibility.md).
 
+## Before installing
+
+- Complete the jailbreak and its required post-jailbreak setup. The [Kindle Modding Wiki's getting-started guide](https://kindlemodding.org/jailbreaking/) explains the process and links to its jailbreak wizard. Availability depends on your Kindle model and firmware.
+- Install KUAL and confirm you can open it from the Kindle library. KUAL is the launcher for this extension; copying the monitor ZIP onto an unmodified Kindle will not install it.
+- Have Home Assistant set up with a working Bluetooth receiver and the BTHome integration.
+
+The wiki's current [post-jailbreak guide](https://kindlemodding.org/jailbreaking/whats-next/) describes KPM and scriptlets for newer jailbreak setups. This project's distribution is a KUAL extension and has no KPM package or scriptlet installer. The wiki's [migration notes](https://kindlemodding.org/jailbreaking/faq/migration.html) also state that KUAL is unsupported on firmware 5.19.4 and later. A successful jailbreak alone does not establish compatibility with this monitor; use the qualified device/build above.
+
 ## Installation and Home Assistant
 
-1. Extract `kindle-battery-monitor-<version>.zip` into the Kindle's `extensions/` directory.
-2. Open **KUAL > Kindle battery monitor > Install/update** and wait for its result.
-3. Place the awake Kindle near a Home Assistant Bluetooth receiver and use the BTHome integration for discovery.
+1. Obtain the built `kindle-battery-monitor-<version>.zip` KUAL package from a release or a successful Actions run. GitHub's automatically generated source-code archives are for building the project; use the packaged extension for installation.
+2. Connect the Kindle over USB and extract the package into the `extensions/` directory at the root of its visible storage. The resulting path should be `extensions/kindle-battery-monitor/`, containing `config.xml`, `menu.json`, `bin/`, and `payload/`. Over SSH, the same directory is `/mnt/us/extensions/kindle-battery-monitor/`.
+3. Safely eject and disconnect the Kindle, then open KUAL from its library.
+4. Select **Kindle battery monitor > Install/update** and wait for its result. Copying the extension only adds its launcher files; this KUAL action installs the runtime and startup job. Use **Status** to check the result.
+5. Place the awake Kindle near a Home Assistant Bluetooth receiver and use the BTHome integration for discovery.
 
 First installation enables boot startup and starts the monitor. Updates preserve the saved boot setting and current session independently. Restart the tested Kindle with USB disconnected and reconnect after Home/KUAL loads, following the qualification workaround in [compatibility](docs/compatibility.md).
 
@@ -80,3 +94,11 @@ See the [glossary](CONTEXT.md), [protocol notes](docs/protocol.md), [startup dec
 MIT license. See [LICENSE](LICENSE). Dependencies retain their own licenses.
 
 See [Contributing](CONTRIBUTING.md) for pull requests and [GitHub and releases](docs/github.md) for CI artifacts, public repository setup, and version-tag draft releases.
+
+## Disclaimer and trademarks
+
+Use this software at your own risk. It is provided "as is", without warranty, under the [MIT license](LICENSE). To the extent permitted by applicable law, the authors and contributors are not liable for damage to your device, data loss, or other losses arising from its use.
+
+This is an independent community project. It is not affiliated with, sponsored by, or endorsed by Amazon.
+
+Amazon and Kindle are trademarks of Amazon.com, Inc. or its affiliates. These names are used only to identify the devices and services this project works with. See [Amazon's trademark notices](https://digprjsurvey.amazon.com/csad/help/node/TmxLpZIaihydtU9SVE).
