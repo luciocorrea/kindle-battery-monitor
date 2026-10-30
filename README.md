@@ -1,12 +1,12 @@
 # Kindle battery monitor
 
-Report a Kindle's battery percentage to Home Assistant using unencrypted [BTHome v2](https://bthome.io/) Bluetooth LE advertisements.
+Report a Kindle's battery percentage and charging state to Home Assistant using unencrypted [BTHome v2](https://bthome.io/) Bluetooth LE advertisements.
 
 **Requires a modded (jailbroken) Kindle with KUAL installed.** This project is a KUAL extension: you use its KUAL menu to install the monitor, manage startup, check status, and uninstall it.
 
-Samples are taken at startup, on battery-change events, and every ten minutes while awake. Each broadcast uses a five-second timer followed by bounded radio cleanup. The monitor permits normal suspend.
+Samples are taken at startup, on battery-level or charging-state notifications, and every ten minutes while awake. Charging notifications prompt a fresh reading, so the monitor can report changes without waiting for the next periodic refresh. Each broadcast uses a five-second timer followed by bounded radio cleanup. The monitor permits normal suspend; a new report can wait for an ongoing broadcast to finish or for Bluetooth to become available.
 
-The fixed advertised name is `Kindle`. Home Assistant adds an address suffix, for example `Kindle ABCD`. The name is independent of Kindle Settings. Owned bursts use the factory public Bluetooth address so receivers recognize one device across radio restarts. Nearby receivers can read the percentage and address.
+The fixed advertised name is `Kindle`. Home Assistant adds an address suffix, for example `Kindle ABCD`. The name is independent of Kindle Settings. Owned bursts use the factory public Bluetooth address so receivers recognize one device across radio restarts. Nearby receivers can read the percentage, charging state and address.
 
 ## Supported device
 
@@ -42,7 +42,9 @@ First installation enables boot startup and starts the monitor. Updates preserve
 
 Wait for each action to finish. Keep the ZIP outside the Kindle for reinstallation. Use confirmed uninstall instead of deleting an extension that still has a boot job. Home Assistant history remains intact. If recovery records are retained after an error, inspect the failure before retrying.
 
-Home Assistant retains the last percentage while the Kindle sleeps. A competing Bluetooth owner can defer a burst until a later sample trigger. Existing BTHome devices may need their integration reloaded after receiving a named packet to refresh the default device name. The integration entry title and explicit entity-name overrides are separate labels; preserve existing entity IDs and dashboard references when renaming.
+Home Assistant exposes battery percentage and a separate charging binary sensor on the same BTHome device. Charging is included only when the Kindle reports `isCharging` as zero or one. A failed or invalid charging read sends battery percentage alone, leaving Home Assistant's previous charging state unchanged. Both displayed values retain their last reports while the Kindle sleeps. A physical unplug/replug check confirmed charging-off and charging-on reception on the event-listening build, with matching property readbacks and device-side radio cleanup. Precise transition latency and suspend of this exact build remain untested.
+
+A competing Bluetooth owner can defer a burst until a later sample trigger. Existing BTHome devices may need their integration reloaded after receiving a named packet to refresh the default device name. The integration entry title and explicit entity-name overrides are separate labels; preserve existing entity IDs and dashboard references when renaming.
 
 ## Home Assistant dashboard
 

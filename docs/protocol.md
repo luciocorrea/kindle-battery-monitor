@@ -1,14 +1,23 @@
 # Battery broadcast and radio transaction
 
-The battery source is the integer `battLevel` property of `com.lab126.powerd`. The bundled Rust LIPC implementation speaks DBus directly. The monitor subscribes to `battLevelChanged` and waits on refresh timers or cancellation, adding no polling or suspend inhibitor.
+The battery source is the integer `battLevel` property of `com.lab126.powerd`. After each valid percentage read, the monitor reads the integer `isCharging` property from the same service. Only zero and one are accepted as not charging and charging. Read failures and other values are logged and omit charging from that sample while preserving battery percentage. Each sample starts without charging state, so a failed read never reuses an earlier value. Cancellation of either property read prevents publication.
+
+The bundled Rust LIPC implementation speaks DBus directly. The monitor subscribes to `battLevelChanged`, `charging`, `notCharging` and `battStateInfoChanged`. One bus match selects signals on `/default` with interface `com.lab126.powerd`; a receive-side allowlist accepts only those four member names. Unrelated messages yield cooperatively without triggering sampling. Keeping one match preserves the existing setup and cleanup budgets.
+
+Each accepted event triggers fresh percentage and charging reads. Signal bodies are never authoritative values: the stock `charging` notification can precede actual charge detection, while a subsequent `battStateInfoChanged` prompts another read of the settled state. Pending notifications coalesce into the existing one-slot trigger; an active publication must finish owned cleanup before another sample can publish. The listener adds no polling, debounce sleep, wake alarm or suspend inhibitor. Sampling also remains at startup and every ten minutes while awake. Notifications or radio contention can delay delivery; there is no hard immediate plug/unplug guarantee. The two property reads are sequential observations, not an atomic snapshot.
 
 BTHome service UUID is `0xFCD2`. Service bytes are:
 
 ```text
 D2 FC 44 00 <packet-id> 01 <battery-percent>
+D2 FC 44 00 <packet-id> 01 <battery-percent> 16 <charging>
 ```
 
-`0x44` selects unencrypted BTHome v2 with trigger-based device behavior. Object `0x00` is packet ID and `0x01` is battery percentage from zero through 100. The primary advertisement also contains Complete Local Name `Kindle`, encoded as `07 09 4B 69 6E 64 6C 65`. With flags, the advertisement occupies 20 of 31 legacy bytes. The stock stack expands requested flags `0x06` to the observed `0x1E`.
+`0x44` selects unencrypted BTHome v2 with trigger-based device behavior. Object `0x00` is packet ID and `0x01` is battery percentage from zero through 100. Optional object `0x16` is battery charging, encoded as `00` or `01`. Objects remain in ascending numeric order, as required by the [BTHome specification](https://bthome.io/format/). The primary advertisement also contains Complete Local Name `Kindle`, encoded as `07 09 4B 69 6E 64 6C 65`. With flags, the advertisement occupies 20 of 31 legacy bytes without charging, or 22 with it. BSA service-payload length is five or seven bytes respectively, excluding the separately encoded UUID. The stock stack expands requested flags `0x06` to the observed `0x1E`.
+
+Home Assistant's BTHome integration exposes charging as a separate binary sensor on the same device. Missing charging bytes do not report false or clear a previous receiver value. Home Assistant retains the last charging state when observations fail or the Kindle sleeps. Host fake-service and fake-radio tests cover encoding and cleanup requests. Bounded awake checks established named startup reception and device-side radio cleanup. Host tests cover all four event names, unrelated-message rejection, and fresh property readback across early/delayed charging and stale event bodies.
+
+An operator-attended unplug/replug check of the event-listening build confirmed fresh charging-off and charging-on packets on the same HA device, both with battery 98% and matching property readbacks. The bounded native observer captured `battStateInfoChanged` then `notCharging` with `isCharging=0`. It ended before reconnection; HA history, the on packet and final `isCharging=1` establish on delivery, but not a captured on-event sequence. Both reports completed advertising-stop/readback, rotation restoration requests and source release. Precise transition latency, paired native ordering for both transitions, suspend and independent on-air privacy-restoration evidence remain unqualified.
 
 On the qualified firmware, BSA configuration payloads are 832 bytes. Advertising-data mask `0x8102` selects flags, service data, and the explicit name element. This avoids the native name flag, which reads the global Bluetooth name and can consume space before service data. The request selects primary advertisement data, not scan response. Protocol fixtures lock down the recovered encoding.
 
@@ -20,7 +29,7 @@ Scheduler/controller delays can extend the RF interval; the timer is not a hard 
 
 Startup waits on DBus readiness with a finite deadline and cancellation. Upstart 0.6.6 supports the enabled job's boot condition; the disabled template omits that condition while remaining manually startable. `manual` and `.override` are not used. Upgrades preserve automatic startup and the current session independently.
 
-Battery-event listener setup has a separate five-second deadline across connection and acknowledged subscription, with startup cancellation checked first. Failure drops pending setup and its dedicated connection. This releases local ownership; it does not prove remotely acknowledged match removal.
+Battery/charging-event listener setup has a separate five-second deadline across connection and acknowledged subscription, with startup cancellation checked first. Failure drops pending setup and its dedicated connection. This releases local ownership; it does not prove remotely acknowledged match removal.
 
 The listener coalesces notifications into one pending battery trigger inside the caller's async scope. Battery reads, BSA exchanges, radio operations, and event waits cooperate with this driver; ignored DBus messages also yield. No project worker thread or detached task owns the listener. A listener failure cancels a pending battery read, requests burst cancellation, and closes its trigger channel; it does not drop an active publication. Listener closure takes priority over a buffered sampling trigger, preventing another publication after failure. Cancelling a read cannot undo a call already sent, but it fabricates no percentage and performs no write. Advertising stop, readback, identity restoration, and owned-source release must finish before listener teardown starts. Monitor and listener failures are retained together.
 

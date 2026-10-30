@@ -163,6 +163,10 @@ struct FakeBattery {
 impl BatterySource for FakeBattery {
     type Error = FakeBatteryError;
 
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        Ok(None)
+    }
+
     async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
         self.reads += 1;
         self.failure.take().map_or(Ok(83), Err)

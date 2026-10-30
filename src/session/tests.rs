@@ -63,6 +63,10 @@ struct GatedBattery {
 }
 impl BatterySource for GatedBattery {
     type Error = PowerdReadError;
+
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        Ok(None)
+    }
     async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
         self.observed.record("read-battery");
         future::or(

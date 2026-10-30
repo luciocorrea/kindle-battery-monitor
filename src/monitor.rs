@@ -9,15 +9,21 @@ use std::error::Error;
 use std::future::Future;
 use thiserror::Error;
 
-/// Reads the reported battery percentage on demand.
+/// Reads the reported battery percentage and optional charging state on demand.
 ///
 /// Implementations own any IO deadlines. Range validation belongs to [`Monitor`].
 pub(crate) trait BatterySource {
-    /// A failure to read the reported percentage.
+    /// A required percentage-read failure or cancellation of either property read.
     type Error: Error;
 
     /// Reads a fresh reported percentage, leaving range checks to the caller.
     fn read_percentage(&mut self) -> impl Future<Output = Result<i32, Self::Error>>;
+
+    /// Reads fresh charging state, returning `None` for invalid or failed observations.
+    ///
+    /// Implementations log optional observation failures. Cancellation remains an
+    /// error so it cannot be followed by publication of a battery-only sample.
+    fn read_charging(&mut self) -> impl Future<Output = Result<Option<bool>, Self::Error>>;
 }
 
 /// Publishes one sample and completes its owned cleanup before returning.
@@ -65,7 +71,7 @@ pub(crate) trait EventSource {
 pub(crate) enum Trigger {
     /// Take the initial sample for a new session.
     Started,
-    /// Resample after a battery-change notification.
+    /// Resample after a battery-level, charging or battery-state notification.
     BatteryChanged,
     /// Resample after a periodic refresh timer becomes ready.
     Refresh,
@@ -127,7 +133,8 @@ impl Monitor {
 
     /// Handles one trigger, awaiting battery IO and publication cleanup.
     ///
-    /// Shutdown performs no IO. Other triggers read and validate a fresh percentage.
+    /// Shutdown performs no IO. Other triggers read and validate a fresh percentage,
+    /// then read optional charging state without reusing earlier observations.
     /// The packet ID advances with wrapping arithmetic only on
     /// [`Publication::Published`]; deferred, cancelled, or failed attempts retain it.
     ///
@@ -153,7 +160,14 @@ impl Monitor {
                     .await
                     .map_err(MonitorError::Battery)?;
                 let level = BatteryLevel::try_from(percentage)?;
-                let sample = BthomeSample::new(level, self.next_packet_id);
+                let mut sample = BthomeSample::new(level, self.next_packet_id);
+                if let Some(charging) = battery
+                    .read_charging()
+                    .await
+                    .map_err(MonitorError::Battery)?
+                {
+                    sample = sample.with_charging(charging);
+                }
                 match broadcaster
                     .broadcast(sample)
                     .await

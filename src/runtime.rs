@@ -53,10 +53,10 @@ pub struct InvalidRefreshInterval {
     pub interval: Duration,
 }
 
-/// An event source that blocks on shutdown, battery notifications, or refresh.
+/// An event source that blocks on shutdown, battery/charging notifications, or refresh.
 ///
 /// Ready shutdown messages or shutdown-channel disconnection take priority over
-/// battery notifications, which take priority over refresh. Battery-channel
+/// battery/charging notifications, which take priority over refresh. Battery-channel
 /// disconnection is an error, including when a trigger was already buffered.
 /// No device probes occur while waiting.
 pub(crate) struct RuntimeEvents {

@@ -36,7 +36,7 @@ const READINESS_TIMEOUT: Duration = Duration::from_secs(30);
 pub enum RunMode {
     /// Publish one sample with packet ID zero and complete required cleanup.
     Once,
-    /// Sample initially, on battery notifications, and every ten minutes while awake.
+    /// Sample initially, on battery/charging notifications, and every ten minutes while awake.
     Continuous,
 }
 

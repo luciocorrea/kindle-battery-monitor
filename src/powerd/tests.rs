@@ -48,6 +48,11 @@ struct GatedPowerd {
 
 #[zbus::interface(name = "com.lab126.powerd", spawn = false)]
 impl GatedPowerd {
+    #[zbus(name = "getisChargingInt")]
+    async fn charging(&self) -> (u32, i32) {
+        self.battery_level().await
+    }
+
     #[zbus(name = "getbattLevelInt")]
     async fn battery_level(&self) -> (u32, i32) {
         self.entered.send(()).await.expect("record method entry");
@@ -66,6 +71,194 @@ impl GatedPowerd {
     // Serial dispatch makes this a readback barrier for any previously issued
     // battery request on the same client connection, without fixed sleeps.
     fn barrier(&self) {}
+}
+
+struct RecordingBatteryBroadcast(Vec<Vec<u8>>);
+
+impl crate::monitor::Broadcaster for RecordingBatteryBroadcast {
+    type Error = std::convert::Infallible;
+
+    async fn broadcast(
+        &mut self,
+        sample: crate::bthome::BthomeSample,
+    ) -> Result<crate::monitor::Publication, Self::Error> {
+        self.0.push(sample.service_data());
+        Ok(crate::monitor::Publication::Published)
+    }
+}
+
+#[test]
+fn charging_notifications_read_current_properties_instead_of_trusting_event_bodies() {
+    use crate::monitor::{Monitor, Trigger};
+    use crate::powerd_events::PowerdEvents;
+    let (_bus, address) = PrivateTestBus::start();
+    futures_lite::future::block_on(futures_lite::future::or(
+        async {
+            let (entered, _observed) = async_channel::unbounded();
+            let (reply, replies) = async_channel::unbounded();
+            let publisher = zbus::connection::Builder::address(address.as_str())
+                .expect("private bus address")
+                .name("com.lab126.powerd")
+                .expect("powerd name")
+                .serve_at("/default", GatedPowerd { entered, replies })
+                .expect("gated powerd")
+                .build()
+                .await
+                .expect("publisher");
+            let connection = zbus::connection::Builder::address(address.as_str())
+                .expect("private bus address")
+                .build()
+                .await
+                .expect("property client");
+            let mut battery = SystemPowerdBattery::from_connection(connection);
+            let connection = zbus::connection::Builder::address(address.as_str())
+                .expect("private bus address")
+                .build()
+                .await
+                .expect("event client");
+            let mut events = PowerdEvents::dedicated(connection)
+                .await
+                .expect("subscription");
+            let mut monitor = Monitor::new(7);
+            let mut broadcaster = RecordingBatteryBroadcast(Vec::new());
+            for (member, charging, stale_body) in [
+                ("charging", 0, "charging is not confirmed yet"),
+                (
+                    "battStateInfoChanged",
+                    1,
+                    "{\"battInfo\":[{\"charging\":false}]}",
+                ),
+                ("notCharging", 0, "{\"charging\":true}"),
+            ] {
+                reply.send((0, 52)).await.expect("current percentage");
+                reply
+                    .send((0, charging))
+                    .await
+                    .expect("current charging state");
+                publisher
+                    .emit_signal(
+                        None::<&str>,
+                        "/default",
+                        "com.lab126.powerd",
+                        member,
+                        &stale_body,
+                    )
+                    .await
+                    .expect("state notification sent");
+                events.next().await.expect("state notification received");
+                monitor
+                    .handle(Trigger::BatteryChanged, &mut battery, &mut broadcaster)
+                    .await
+                    .expect("fresh properties published");
+            }
+            assert_eq!(
+                broadcaster.0,
+                vec![
+                    vec![0xd2, 0xfc, 0x44, 0, 7, 1, 52, 0x16, 0],
+                    vec![0xd2, 0xfc, 0x44, 0, 8, 1, 52, 0x16, 1],
+                    vec![0xd2, 0xfc, 0x44, 0, 9, 1, 52, 0x16, 0],
+                ]
+            );
+            assert!(events
+                .shutdown_with_deadlines(std::future::pending(), std::future::pending())
+                .await
+                .is_empty());
+        },
+        async {
+            async_io::Timer::after(Duration::from_secs(5)).await;
+            panic!("notification readback watchdog");
+        },
+    ));
+}
+
+#[test]
+fn charging_samples_accept_only_binary_values_and_keep_battery_on_optional_failures() {
+    let (_bus, address) = PrivateTestBus::start();
+    futures_lite::future::block_on(async {
+        let (entered, _observed) = async_channel::unbounded();
+        let (reply, replies) = async_channel::unbounded();
+        let _server = zbus::connection::Builder::address(address.as_str())
+            .expect("private bus address")
+            .name("com.lab126.powerd")
+            .expect("powerd test name")
+            .serve_at("/default", GatedPowerd { entered, replies })
+            .expect("gated powerd")
+            .build()
+            .await
+            .expect("powerd test service connects");
+        let connection = zbus::connection::Builder::address(address.as_str())
+            .expect("private bus address")
+            .build()
+            .await
+            .expect("client connects");
+        let mut battery = SystemPowerdBattery::from_connection(connection);
+        let mut monitor = crate::monitor::Monitor::new(7);
+        let mut broadcaster = RecordingBatteryBroadcast(Vec::new());
+        let mut expected_packets = Vec::new();
+        for (status, raw, expected) in [
+            (0, 0, Some(false)),
+            (0, 1, Some(true)),
+            (0, -1, None),
+            (0, 2, None),
+            (LipcStatus::NoSuchProperty.code(), 1, None),
+            (0x8000_0042, 1, None),
+            (0, 1, Some(true)),
+        ] {
+            reply.send((0, 52)).await.expect("script percentage reply");
+            reply
+                .send((status, raw))
+                .await
+                .expect("script charging reply");
+            monitor
+                .handle(
+                    crate::monitor::Trigger::Refresh,
+                    &mut battery,
+                    &mut broadcaster,
+                )
+                .await
+                .expect("battery report survives optional failure");
+            let mut expected_bytes =
+                vec![0xd2, 0xfc, 0x44, 0, 7 + expected_packets.len() as u8, 1, 52];
+            if let Some(charging) = expected {
+                expected_bytes.extend_from_slice(&[0x16, u8::from(charging)]);
+            }
+            expected_packets.push(expected_bytes);
+        }
+        assert_eq!(broadcaster.0, expected_packets);
+    });
+}
+
+#[test]
+fn cancelling_a_held_charging_read_is_not_an_optional_observation_failure() {
+    let (_bus, address) = PrivateTestBus::start();
+    futures_lite::future::block_on(async {
+        let (entered, observed) = async_channel::bounded(1);
+        let (reply, replies) = async_channel::bounded(1);
+        let _server = zbus::connection::Builder::address(address.as_str())
+            .expect("private bus address")
+            .name("com.lab126.powerd")
+            .expect("powerd test name")
+            .serve_at("/default", GatedPowerd { entered, replies })
+            .expect("gated powerd")
+            .build()
+            .await
+            .expect("powerd test service connects");
+        let connection = zbus::connection::Builder::address(address.as_str())
+            .expect("private bus address")
+            .build()
+            .await
+            .expect("client connects");
+        let (cancel, cancelled) = async_channel::bounded(1);
+        let mut battery =
+            SystemPowerdBattery::from_connection(connection).with_cancellation(cancelled);
+        let (result, ()) = futures_lite::future::zip(battery.read_charging(), async {
+            observed.recv().await.expect("charging call is pending");
+            cancel.send(()).await.expect("cancel pending charging read");
+        })
+        .await;
+        reply.send((0, 1)).await.expect("release remote reply");
+        assert!(matches!(result, Err(PowerdReadError::Cancelled)));
+    });
 }
 
 #[test]
@@ -266,6 +459,11 @@ struct MalformedPowerd;
 
 #[zbus::interface(name = "com.lab126.powerd")]
 impl MalformedPowerd {
+    #[zbus(name = "getisChargingInt")]
+    fn charging(&self) -> &str {
+        "not a status/integer tuple"
+    }
+
     #[zbus(name = "getbattLevelInt")]
     fn battery_level(&self) -> &str {
         "not a status/integer tuple"
@@ -306,6 +504,13 @@ fn malformed_async_replies_retain_decode_context_and_the_dbus_source() {
             .source()
             .expect("decode source retained")
             .is::<zbus::Error>());
+        assert_eq!(
+            battery
+                .read_charging()
+                .await
+                .expect("optional malformed reply"),
+            None
+        );
     });
 }
 
@@ -334,6 +539,13 @@ fn a_missing_async_service_retains_read_context_and_the_dbus_source() {
             .source()
             .expect("transport source retained")
             .is::<zbus::Error>());
+        assert_eq!(
+            battery
+                .read_charging()
+                .await
+                .expect("optional unavailable service"),
+            None
+        );
     });
 }
 

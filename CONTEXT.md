@@ -8,8 +8,12 @@ Shared language for the battery monitor and its KUAL package.
 The Kindle's reported remaining battery charge, expressed as a percentage from 0 to 100.
 _Avoid_: Battery health, battery capacity, charge rate
 
+**Charging state**:
+The Kindle's reported indication of whether its battery is charging. An unknown state is distinct from not charging.
+_Avoid_: Plugged in, USB connected, charge rate
+
 **Battery broadcast**:
-A BLE advertisement carrying a sampled Kindle battery level as BTHome service data. A receiver obtains the sample without connecting to the Kindle.
+A BLE advertisement carrying a sampled Kindle battery level and optional charging state as BTHome service data. A receiver obtains the sample without connecting to the Kindle.
 _Avoid_: Battery read request, GATT notification
 
 **Bluetooth alias**:
