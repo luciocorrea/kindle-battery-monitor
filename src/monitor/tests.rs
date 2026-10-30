@@ -15,6 +15,10 @@ struct FakeBattery {
 impl BatterySource for FakeBattery {
     type Error = io::Error;
 
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        Ok(None)
+    }
+
     async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
         self.reads += 1;
         self.readings
@@ -39,6 +43,96 @@ impl Broadcaster for FakeBroadcaster {
         self.samples.push(sample);
         Ok(Publication::Published)
     }
+}
+
+struct ScriptedChargingBattery {
+    charging: VecDeque<Result<Option<bool>, io::Error>>,
+    percentage_reads: usize,
+    charging_reads: usize,
+}
+
+impl BatterySource for ScriptedChargingBattery {
+    type Error = io::Error;
+
+    async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
+        self.percentage_reads += 1;
+        Ok(52)
+    }
+
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        self.charging_reads += 1;
+        self.charging
+            .pop_front()
+            .expect("queued charging observation")
+    }
+}
+
+#[test]
+fn existing_triggers_include_fresh_charging_and_shutdown_reads_neither_property() {
+    async_io::block_on(async {
+        let mut monitor = Monitor::new(7);
+        let mut battery = ScriptedChargingBattery {
+            charging: VecDeque::from([Ok(Some(true)), Ok(Some(false)), Ok(None)]),
+            percentage_reads: 0,
+            charging_reads: 0,
+        };
+        let mut broadcaster = FakeBroadcaster::default();
+        for trigger in [Trigger::Started, Trigger::BatteryChanged, Trigger::Refresh] {
+            assert_eq!(
+                monitor
+                    .handle(trigger, &mut battery, &mut broadcaster)
+                    .await
+                    .expect("sample"),
+                Outcome::Published
+            );
+        }
+        assert_eq!(
+            monitor
+                .handle(Trigger::Shutdown, &mut battery, &mut broadcaster)
+                .await
+                .expect("shutdown"),
+            Outcome::Stopped
+        );
+        assert_eq!((battery.percentage_reads, battery.charging_reads), (3, 3));
+        assert_eq!(
+            broadcaster
+                .samples
+                .iter()
+                .map(|sample| sample.service_data())
+                .collect::<Vec<_>>(),
+            vec![
+                vec![0xd2, 0xfc, 0x44, 0, 7, 1, 52, 0x16, 1],
+                vec![0xd2, 0xfc, 0x44, 0, 8, 1, 52, 0x16, 0],
+                vec![0xd2, 0xfc, 0x44, 0, 9, 1, 52],
+            ]
+        );
+    });
+}
+
+#[test]
+fn cancelled_charging_read_does_not_start_publication_or_advance_packet_id() {
+    async_io::block_on(async {
+        let mut monitor = Monitor::new(7);
+        let mut battery = ScriptedChargingBattery {
+            charging: VecDeque::from([Err(io::Error::other("cancelled")), Ok(Some(true))]),
+            percentage_reads: 0,
+            charging_reads: 0,
+        };
+        let mut broadcaster = FakeBroadcaster::default();
+        assert!(monitor
+            .handle(Trigger::Started, &mut battery, &mut broadcaster)
+            .await
+            .is_err());
+        assert!(broadcaster.samples.is_empty());
+        monitor
+            .handle(Trigger::Refresh, &mut battery, &mut broadcaster)
+            .await
+            .expect("next sample");
+        assert_eq!(
+            broadcaster.samples[0].service_data(),
+            [0xd2, 0xfc, 0x44, 0, 7, 1, 52, 0x16, 1]
+        );
+    });
 }
 
 #[test]

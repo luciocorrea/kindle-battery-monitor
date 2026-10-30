@@ -1,7 +1,10 @@
 //! Async powerd battery reads, with an injected blocking LIPC adapter in tests.
 //!
-//! Reads the integer `battLevel` property. Range validation belongs to
-//! [`crate::bthome::BatteryLevel`]; this adapter returns the reported integer unchanged.
+//! Reads integer `battLevel` and optional `isCharging` properties. Percentage
+//! validation belongs to [`crate::bthome::BatteryLevel`]. Charging accepts only
+//! zero or one; other values and read failures are logged and omitted. Pending
+//! reads cooperate with cancellation, which remains an error rather than an
+//! unknown charging observation. See `docs/protocol.md` for sampling policy.
 
 use crate::monitor::BatterySource;
 use kindle_lipc_dbus::{
@@ -90,9 +93,20 @@ impl SystemPowerdBattery {
 }
 
 impl SystemPowerdBattery {
-    async fn read_uncancelled(&self) -> Result<i32, PowerdReadError> {
+    async fn read_uncancelled(&self, property: &str) -> Result<i32, PowerdReadError> {
         let endpoint = LipcEndpoint::for_service(SERVICE);
-        let method = property_method_name(PropertyAccess::Get, PROPERTY, PropertyType::Int);
+        let method = property_method_name(PropertyAccess::Get, property, PropertyType::Int);
+        let (read_context, decode_context) = if property == PROPERTY {
+            (
+                "read powerd battery integer",
+                "decode powerd battery integer",
+            )
+        } else {
+            (
+                "read powerd charging integer",
+                "decode powerd charging integer",
+            )
+        };
         let reply = self
             .connection
             .call_method(
@@ -104,20 +118,51 @@ impl SystemPowerdBattery {
             )
             .await
             .map_err(|source| PowerdReadError::Dbus {
-                operation: "read powerd battery integer",
+                operation: read_context,
                 source,
             })?;
-        let (status, percentage): (u32, i32) =
+        let (status, value): (u32, i32) =
             reply
                 .body()
                 .deserialize()
                 .map_err(|source| PowerdReadError::Dbus {
-                    operation: "decode powerd battery integer",
+                    operation: decode_context,
                     source,
                 })?;
         match LipcStatus::from_wire_code(status) {
-            LipcStatus::Ok => Ok(percentage),
+            LipcStatus::Ok => Ok(value),
             status => Err(LipcDbusError::Status(status).into()),
+        }
+    }
+
+    async fn read_property(&self, property: &str) -> Result<i32, PowerdReadError> {
+        match &self.cancelled {
+            Some(cancelled) => {
+                futures_lite::future::or(
+                    async {
+                        let _ = cancelled.recv().await;
+                        Err(PowerdReadError::Cancelled)
+                    },
+                    self.read_uncancelled(property),
+                )
+                .await
+            }
+            None => self.read_uncancelled(property).await,
+        }
+    }
+}
+
+fn charging_observation(result: Result<i32, impl std::fmt::Display>) -> Option<bool> {
+    match result {
+        Ok(0) => Some(false),
+        Ok(1) => Some(true),
+        Ok(value) => {
+            tracing::warn!(event = "charging_value_invalid", value);
+            None
+        }
+        Err(error) => {
+            tracing::warn!(event = "charging_read_failed", error = %error);
+            None
         }
     }
 }
@@ -126,18 +171,13 @@ impl BatterySource for SystemPowerdBattery {
     type Error = PowerdReadError;
 
     async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
-        match &self.cancelled {
-            Some(cancelled) => {
-                futures_lite::future::or(
-                    async {
-                        let _ = cancelled.recv().await;
-                        Err(PowerdReadError::Cancelled)
-                    },
-                    self.read_uncancelled(),
-                )
-                .await
-            }
-            None => self.read_uncancelled().await,
+        self.read_property(PROPERTY).await
+    }
+
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        match self.read_property("isCharging").await {
+            Err(PowerdReadError::Cancelled) => Err(PowerdReadError::Cancelled),
+            result => Ok(charging_observation(result)),
         }
     }
 }
@@ -166,6 +206,12 @@ impl<T: LipcMethodTransport> BatterySource for PowerdBattery<T> {
 
     async fn read_percentage(&mut self) -> Result<i32, Self::Error> {
         self.client.get_int_property(SERVICE, PROPERTY)
+    }
+
+    async fn read_charging(&mut self) -> Result<Option<bool>, Self::Error> {
+        Ok(charging_observation(
+            self.client.get_int_property(SERVICE, "isCharging"),
+        ))
     }
 }
 

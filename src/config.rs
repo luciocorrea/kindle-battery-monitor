@@ -45,11 +45,13 @@ pub(crate) fn advertising_data(sample: BthomeSample) -> [u8; CONFIG_BYTES] {
     request[4] = 1;
     request[0x219] = 0x06;
     request[0x23c..0x240].copy_from_slice(&0x8102_u32.to_le_bytes());
-    request[0x250] = 5;
     request[0x254..0x256].copy_from_slice(&2_u16.to_le_bytes());
     let service_data = sample.service_data();
+    // The pure sample encoder returns seven or nine bytes, including the UUID.
+    let data_length = service_data.len() - 2;
+    request[0x250] = data_length as u8;
     request[0x258..0x25a].copy_from_slice(&service_data[..2]);
-    request[0x268..0x26d].copy_from_slice(&service_data[2..]);
+    request[0x268..0x268 + data_length].copy_from_slice(&service_data[2..]);
     // One explicit Complete Local Name element, after the BTHome service data.
     request[0x2b0] = 1;
     request[0x2b1] = 0x09;

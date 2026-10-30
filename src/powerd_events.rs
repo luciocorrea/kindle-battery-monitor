@@ -1,7 +1,8 @@
-//! Asynchronous powerd battery-change subscription without battery polling.
+//! Asynchronous powerd battery/charging notifications without property polling.
 //!
-//! A notification is a sampling trigger, not a battery percentage. The monitor
-//! reads the current percentage separately after receiving it.
+//! A notification is a sampling trigger, not a battery value. The monitor reads
+//! current percentage and charging state after receiving it. See `docs/protocol.md`
+//! for the accepted events, coalescing and cleanup contracts.
 
 use futures_lite::{future, StreamExt};
 use std::future::Future;
@@ -54,11 +55,13 @@ pub enum PowerdCleanupError {
     InvalidDeadline,
 }
 
-/// Owns a connection and acknowledged `battLevelChanged` subscription.
+/// Owns a connection and one acknowledged powerd signal subscription.
 ///
-/// The match rule filters signal type, path, interface, and member, but does not
-/// pin a unique sender. Notifications therefore trigger a fresh property read
-/// rather than being used as authoritative battery values.
+/// The bus rule filters signal type, path and interface, without pinning a unique
+/// sender. Receive-side filtering accepts only `battLevelChanged`, `charging`,
+/// `notCharging` and `battStateInfoChanged`. Notifications trigger fresh property
+/// reads rather than being used as authoritative values. In particular, `charging`
+/// can precede actual charge detection, so it must not be treated as true itself.
 /// Dedicated system subscriptions track explicit registration for scoped runtime
 /// cleanup. Dropping them releases local state without queuing match removal;
 /// [`crate::runtime::EventListener::stop`] supplies cleanup diagnostics.
@@ -82,7 +85,7 @@ impl PowerdEvents {
         Self::dedicated(connection).await
     }
 
-    /// Acknowledges a battery-change match rule on an existing connection.
+    /// Acknowledges a powerd signal match rule on an existing connection.
     ///
     /// Retains automatic zbus rule removal on Drop and never forcibly closes the
     /// caller's shared connection. Use the runtime listener for dedicated,
@@ -99,8 +102,6 @@ impl PowerdEvents {
             .map_err(PowerdEventError::Subscribe)?
             .interface("com.lab126.powerd")
             .map_err(PowerdEventError::Subscribe)?
-            .member("battLevelChanged")
-            .map_err(PowerdEventError::Subscribe)?
             .build();
         let stream = MessageStream::for_match_rule(rule, &connection, Some(8))
             .await
@@ -114,10 +115,10 @@ impl PowerdEvents {
 
     // A dedicated listener tracks its bus rule itself. The unfiltered stream has
     // no automatic RemoveMatch task on Drop, including cancellation of cleanup.
+    // One interface rule retains the existing cleanup budget. The explicit
+    // member allowlist below rejects unrelated powerd signals cooperatively.
     pub(crate) async fn dedicated(connection: Connection) -> Result<Self, PowerdEventError> {
-        let rule =
-            "type='signal',path='/default',interface='com.lab126.powerd',member='battLevelChanged'"
-                .to_owned();
+        let rule = "type='signal',path='/default',interface='com.lab126.powerd'".to_owned();
         let stream = MessageStream::from(&connection);
         connection
             .call_method(
@@ -220,7 +221,15 @@ impl PowerdEvents {
                     if message.message_type() == Type::Signal
                         && header.path().map(|x| x.as_str()) == Some("/default")
                         && header.interface().map(|x| x.as_str()) == Some("com.lab126.powerd")
-                        && header.member().map(|x| x.as_str()) == Some("battLevelChanged")
+                        && matches!(
+                            header.member().map(|x| x.as_str()),
+                            Some(
+                                "battLevelChanged"
+                                    | "charging"
+                                    | "notCharging"
+                                    | "battStateInfoChanged"
+                            )
+                        )
                     {
                         return Ok(());
                     }
