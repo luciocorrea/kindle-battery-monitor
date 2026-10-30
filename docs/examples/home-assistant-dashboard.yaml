@@ -1,5 +1,6 @@
 # Full dashboard configuration for an empty, manually managed dashboard.
-# Replace sensor.kindle_battery with your BTHome battery entity ID.
+# Replace sensor.kindle_battery and binary_sensor.kindle_charging with your
+# BTHome battery and charging entity IDs.
 title: Kindle battery
 views:
   - title: Battery
@@ -26,23 +27,44 @@ views:
             grid_options:
               columns: full
               rows: auto
+          - type: tile
+            entity: binary_sensor.kindle_charging
+            name: Charging status
+            state_content: state
+            color: green
+            tap_action:
+              action: more-info
+            icon_tap_action:
+              action: more-info
+            grid_options:
+              columns: full
+              rows: 1
           - type: markdown
             content: >-
-              Updates on battery changes and every 10 minutes while the Kindle is awake.
-              The last reported percentage remains here while it sleeps.
+              Updates on battery and charging changes, and every 10 minutes while the
+              Kindle is awake. Both values show the last received report while it sleeps.
             grid_options:
               columns: full
               rows: auto
       - type: grid
         cards:
           - type: heading
-            heading: Battery history
+            heading: Battery and charging history
             heading_style: title
             icon: mdi:chart-line
           - type: history-graph
             entities:
               - entity: sensor.kindle_battery
                 name: Kindle
+            hours_to_show: 24
+            grid_options:
+              columns: full
+              rows: auto
+          - type: history-graph
+            title: Charging · last 24 hours
+            entities:
+              - entity: binary_sensor.kindle_charging
+                name: Charging
             hours_to_show: 24
             grid_options:
               columns: full
